@@ -1,5 +1,4 @@
 pipeline {
-
     agent any
 
     tools {
@@ -7,102 +6,162 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME     = "Webapppp"
-        DOCKER_USER    = "rakshu037"
-        IMAGE_TAG      = "latest"
-        CONTAINER_NAME = "my-war-app"
-        HOST_PORT      = "8084"
-        CONTAINER_PORT = "8080"
+        IMAGE_NAME = "webapp"
+        DOCKER_USER = "rakshu037"
+        CONTAINER_NAME = "webapp-war-container"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Build') {
             steps {
-                checkout scm
+                echo "Building the project..."
+                sh 'mvn clean package'
+            }
+            post {
+                success {
+                    echo 'Build completed successfully.'
+                }
+                failure {
+                    echo 'Build failed.'
+                }
             }
         }
 
-        stage('Build Maven Project') {
+        stage('Docker Build Image') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                echo "Building Docker Image..."
+                sh 'sudo docker build -t $IMAGE_NAME .'
             }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+            post {
+                success {
+                    echo 'Docker image built successfully.'
+                }
+                failure {
+                    echo 'Docker image build failed.'
+                }
             }
         }
 
         stage('Docker Login') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub-cred-id',
-                        usernameVariable: 'USERNAME',
-                        passwordVariable: 'PASSWORD'
-                    )
-                ]) {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-cred-id',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
                     sh '''
-                    echo "$PASSWORD" | docker login \
-                    -u "$USERNAME" \
-                    --password-stdin
+                    echo "$PASS" | sudo docker login -u "$USER" --password-stdin
                     '''
                 }
             }
         }
 
-        stage('Tag Docker Image') {
+        stage('Docker Tag Image') {
             steps {
                 sh '''
-                docker tag \
-                ${IMAGE_NAME}:${IMAGE_TAG} \
-                ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}
+                sudo docker tag $IMAGE_NAME $DOCKER_USER/$IMAGE_NAME:latest
                 '''
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Docker Push Image') {
             steps {
                 sh '''
-                docker push \
-                ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}
+                sudo docker push $DOCKER_USER/$IMAGE_NAME:latest
                 '''
             }
         }
 
-        stage('Deploy Container') {
+        stage('Cleanup Local Images') {
             steps {
                 sh '''
-                docker stop ${CONTAINER_NAME} || true
-                docker rm ${CONTAINER_NAME} || true
-
-                docker run -d \
-                --name ${CONTAINER_NAME} \
-                -p ${HOST_PORT}:${CONTAINER_PORT} \
-                --restart unless-stopped \
-                ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}
+                sudo docker rmi $DOCKER_USER/$IMAGE_NAME:latest || true
+                sudo docker rmi $IMAGE_NAME || true
                 '''
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                script {
+
+                    def exists = sh(
+                        script: "sudo docker ps -a --format '{{.Names}}' | grep -w ${CONTAINER_NAME} || true",
+                        returnStdout: true
+                    ).trim()
+
+                    if (exists) {
+
+                        echo "Container already exists."
+
+                        def choice = input(
+                            id: 'RestartContainer',
+                            message: 'Container already exists. Redeploy?',
+                            parameters: [
+                                choice(
+                                    name: 'ACTION',
+                                    choices: ['Yes', 'No'],
+                                    description: 'Choose'
+                                )
+                            ]
+                        )
+
+                        if(choice == 'Yes') {
+
+                            sh """
+                            sudo docker stop ${CONTAINER_NAME} || true
+                            sudo docker rm ${CONTAINER_NAME} || true
+
+                            sudo docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            -p 8084:8080 \
+                            ${DOCKER_USER}/${IMAGE_NAME}:latest
+                            """
+
+                        } else {
+
+                            echo "Deployment skipped."
+
+                        }
+
+                    } else {
+
+                        sh """
+                        sudo docker run -d \
+                        --name ${CONTAINER_NAME} \
+                        -p 8084:8080 \
+                        ${DOCKER_USER}/${IMAGE_NAME}:latest
+                        """
+
+                    }
+
+                }
             }
         }
 
         stage('Docker Logout') {
             steps {
-                sh 'docker logout'
+                sh 'sudo docker logout'
             }
         }
+
     }
 
     post {
+
         always {
-            echo 'Pipeline Finished'
+            echo "Pipeline Finished."
         }
+
         success {
-            echo 'Deployment Successful'
+            echo "Pipeline Executed Successfully."
         }
+
         failure {
-            echo 'Deployment Failed'
+            echo "Pipeline Failed."
         }
+
     }
+
 }
