@@ -6,9 +6,9 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "zomato-war-kubernetes"
+        IMAGE_NAME = "Webapp"
         DOCKER_USER = "rakshu037"
-        CONTAINER_NAME = "zomato-war-container"
+        CONTAINER_NAME = "Webapp-container"
     }
 
     stages {
