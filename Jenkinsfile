@@ -5,12 +5,6 @@ pipeline {
         maven 'maven'
     }
 
-    environment {
-        IMAGE_NAME = "Webapppp"
-        DOCKER_USER = "rakshu037"
-        CONTAINER_NAME = "Webapppp-container"
-    }
-
     stages {
 
         stage('Build') {
@@ -18,28 +12,11 @@ pipeline {
                 echo "Building the project..."
                 sh 'mvn clean package'
             }
-            post {
-                success {
-                    echo 'Build completed successfully.'
-                }
-                failure {
-                    echo 'Build failed.'
-                }
-            }
         }
 
         stage('Docker Build Image') {
             steps {
-                echo "Building Docker Image..."
-                sh 'sudo docker build -t $IMAGE_NAME .'
-            }
-            post {
-                success {
-                    echo 'Docker image built successfully.'
-                }
-                failure {
-                    echo 'Docker image build failed.'
-                }
+                sh 'sudo docker build -t Webapppp .'
             }
         }
 
@@ -51,7 +28,7 @@ pipeline {
                     passwordVariable: 'PASS'
                 )]) {
                     sh '''
-                    echo "$PASS" | sudo docker login -u "$USER" --password-stdin
+                        echo "$PASS" | sudo docker login -u "$USER" --password-stdin
                     '''
                 }
             }
@@ -59,109 +36,46 @@ pipeline {
 
         stage('Docker Tag Image') {
             steps {
-                sh '''
-                sudo docker tag $IMAGE_NAME $DOCKER_USER/$IMAGE_NAME:latest
-                '''
+                sh 'sudo docker tag Webapppp rakshitar26-hue/Webapppp:latest'
             }
         }
 
         stage('Docker Push Image') {
             steps {
-                sh '''
-                sudo docker push $DOCKER_USER/$IMAGE_NAME:latest
-                '''
-            }
-        }
-
-        stage('Cleanup Local Images') {
-            steps {
-                sh '''
-                sudo docker rmi $DOCKER_USER/$IMAGE_NAME:latest || true
-                sudo docker rmi $IMAGE_NAME || true
-                '''
+                sh 'sudo docker push rakshitar26-hue/Webapppp:latest'
             }
         }
 
         stage('Run Docker Container') {
             steps {
-                script {
-
-                    def exists = sh(
-                        script: "sudo docker ps -a --format '{{.Names}}' | grep -w ${CONTAINER_NAME} || true",
-                        returnStdout: true
-                    ).trim()
-
-                    if (exists) {
-
-                        echo "Container already exists."
-
-                        def choice = input(
-                            id: 'RestartContainer',
-                            message: 'Container already exists. Redeploy?',
-                            parameters: [
-                                choice(
-                                    name: 'ACTION',
-                                    choices: ['Yes', 'No'],
-                                    description: 'Choose'
-                                )
-                            ]
-                        )
-
-                        if(choice == 'Yes') {
-
-                            sh """
-                            sudo docker stop ${CONTAINER_NAME} || true
-                            sudo docker rm ${CONTAINER_NAME} || true
-
-                            sudo docker run -d \
-                            --name ${CONTAINER_NAME} \
-                            -p 8084:8080 \
-                            ${DOCKER_USER}/${IMAGE_NAME}:latest
-                            """
-
-                        } else {
-
-                            echo "Deployment skipped."
-
-                        }
-
-                    } else {
-
-                        sh """
-                        sudo docker run -d \
-                        --name ${CONTAINER_NAME} \
-                        -p 8084:8080 \
-                        ${DOCKER_USER}/${IMAGE_NAME}:latest
-                        """
-
-                    }
-
-                }
+                sh '''
+                    sudo docker stop webapppp-container || true
+                    sudo docker rm webapppp-container || true
+                    sudo docker run -d -p 8084:80 --name webapppp-container rakshitar26-hue/Webapppp:latest
+                '''
             }
         }
 
-        stage('Docker Logout') {
+        stage('Cleanup') {
             steps {
-                sh 'sudo docker logout'
+                sh '''
+                    sudo docker logout
+                    sudo docker rmi rakshitar26-hue/Webapppp:latest || true
+                    sudo docker rmi Webapppp || true
+                '''
             }
         }
-
     }
 
     post {
-
-        always {
-            echo "Pipeline Finished."
-        }
-
         success {
-            echo "Pipeline Executed Successfully."
+            echo 'Pipeline executed successfully.'
         }
-
         failure {
-            echo "Pipeline Failed."
+            echo 'Pipeline failed.'
         }
-
+        always {
+            echo 'Pipeline execution completed.'
+        }
     }
-
 }
