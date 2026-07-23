@@ -6,9 +6,9 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "Webapp"
+        IMAGE_NAME = "Webapppp"
         DOCKER_USER = "rakshu037"
-        CONTAINER_NAME = "Webapp-container"
+        CONTAINER_NAME = "Webapppp-container"
     }
 
     stages {
